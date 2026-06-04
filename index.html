@@ -7,6 +7,36 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <section class="auth-screen" id="authScreen">
+      <div class="auth-panel">
+        <div class="brand auth-brand">
+          <span class="brand-mark">CR</span>
+          <div>
+            <strong>Research Lab</strong>
+            <span>Team competitor intelligence</span>
+          </div>
+        </div>
+        <h1>Sign in to your research workspace</h1>
+        <p>Use your team email to sync competitors, evidence, snapshots, and reports across devices.</p>
+        <form id="authForm" class="auth-form">
+          <label>
+            Email
+            <input id="authEmail" type="email" autocomplete="email" placeholder="you@company.com" required />
+          </label>
+          <label>
+            Password
+            <input id="authPassword" type="password" autocomplete="current-password" placeholder="Minimum 6 characters" required />
+          </label>
+          <div class="button-row">
+            <button class="primary-action" type="submit">Sign in</button>
+            <button id="signUpButton" type="button">Create account</button>
+          </div>
+        </form>
+        <p class="setup-warning" id="setupWarning"></p>
+        <p class="auth-message" id="authMessage"></p>
+      </div>
+    </section>
+
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
@@ -17,7 +47,7 @@
           </div>
         </div>
 
-        <button class="primary-action" id="newProjectButton">New analysis</button>
+        <button class="primary-action" id="saveProjectButton">Save changes</button>
 
         <nav class="nav-list" aria-label="Workspace sections">
           <a href="#overview" class="active">Overview</a>
@@ -33,6 +63,13 @@
           <strong>Research standard</strong>
           <p>Every claim should be tied to a source URL, capture date, and confidence level.</p>
         </div>
+
+        <div class="sidebar-note user-note">
+          <strong id="userEmail">Signed in</strong>
+          <p id="syncStatus">Sync ready</p>
+          <button id="signOutButton">Sign out</button>
+          <button id="inviteMemberButton">Invite member</button>
+        </div>
       </aside>
 
       <main>
@@ -42,6 +79,7 @@
             <h1>Competitor Analysis</h1>
           </div>
           <div class="toolbar-actions">
+            <button id="createTeamButton">Create team</button>
             <button id="loadSampleButton">Load sample</button>
             <button id="exportButton">Export report</button>
           </div>
@@ -49,6 +87,10 @@
 
         <section class="project-panel">
           <div class="field-grid">
+            <label>
+              Team
+              <select id="teamSelect"></select>
+            </label>
             <label>
               Brand / project
               <input id="projectName" type="text" placeholder="Baby Bhumi" />
@@ -226,6 +268,6 @@
       </article>
     </template>
 
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>

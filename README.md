@@ -1,19 +1,53 @@
 # Competitor Research Lab
 
-A browser-based starter app for structured competitor analysis. It helps collect competitors, source URLs, target audiences, product categories, pricing notes, USP claims, strategy signals, confidence levels, and an exportable Markdown report.
+A browser-based team app for structured competitor analysis. It helps collect competitors, source URLs, target audiences, product categories, pricing notes, USP claims, strategy signals, confidence levels, synced historical snapshots, and an exportable Markdown report.
 
 ## Run it
 
-Open `index.html` in a browser. No build step is required.
+Open `index.html` in a browser after configuring Supabase. No build step is required.
 
 ## What this MVP does
 
 - Tracks competitors, websites, social handles, evidence URLs, and research status.
 - Summarizes audience, products/services, pricing, and USP per competitor.
 - Builds comparison tables and strategy scores.
-- Saves work locally in the browser with `localStorage`.
-- Saves historical snapshots so you can compare competitor movement over time.
+- Uses Supabase Auth for login and team access.
+- Syncs the current workspace and historical snapshots in Supabase.
+- Lets team owners/admins add another signed-up user to the shared workspace.
 - Exports a Markdown report.
+
+## Supabase setup
+
+1. Create a free Supabase project.
+2. In Supabase, open `SQL Editor`.
+3. Run the full contents of `supabase-schema.sql`.
+4. In Supabase, open `Project Settings > API`.
+5. Copy the project URL and public anon key.
+6. Paste them into `config.js`:
+
+```js
+export const SUPABASE_CONFIG = {
+  url: "https://your-project-ref.supabase.co",
+  anonKey: "your-public-anon-key"
+};
+```
+
+7. In Supabase, open `Authentication > URL Configuration`.
+8. Add your deployed GitHub Pages URL to the allowed redirect URLs:
+
+```text
+https://neerajvavi.github.io/BabyBhumiCompAnalysisCGPT/
+```
+
+## Team access
+
+1. First user signs up and signs in.
+2. Click `Create team`.
+3. Other users sign up with their email/password.
+4. The team owner clicks `Invite member` and enters the other user's email.
+5. That user signs in and sees the same team workspace, current data, and historical snapshots.
+
+The app stores the editable workspace in `projects.current_state` and each saved historical point in `snapshots`. This keeps the current version easy to use while preserving every snapshot for comparison.
 
 ## What a deep-research production version needs
 
@@ -55,25 +89,13 @@ Recommended architecture:
 
 ## GitHub workflow
 
-This workspace is already a Git repository. To connect it to GitHub:
-
-1. Create a new empty repository on GitHub.
-2. Copy the repository URL.
-3. Run:
+Use branches for product changes:
 
 ```bash
-git remote add origin <your-github-repo-url>
-git branch -M main
-git push -u origin main
-```
-
-After that, use branches for product changes:
-
-```bash
-git switch -c codex/history-improvements
+git switch -c codex/supabase-sync
 git add .
-git commit -m "Add historical competitor snapshots"
-git push -u origin codex/history-improvements
+git commit -m "Add Supabase team sync"
+git push -u origin codex/supabase-sync
 ```
 
 ## Next implementation step

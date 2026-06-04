@@ -1,3 +1,10 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SUPABASE_CONFIG } from "./config.js";
+
+const supabaseReady = Boolean(SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey);
+const supabase = supabaseReady ? createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey) : null;
+const saveDelay = 700;
+
 const state = {
   activeView: "audience",
   strategies: [
@@ -10,10 +17,30 @@ const state = {
   ],
   competitors: [],
   sources: [],
-  snapshots: []
+  snapshots: [],
+  teams: [],
+  currentTeamId: null,
+  currentProjectId: null,
+  session: null,
+  saveTimer: null,
+  isHydrating: false
 };
 
 const els = {
+  authScreen: document.querySelector("#authScreen"),
+  authForm: document.querySelector("#authForm"),
+  authEmail: document.querySelector("#authEmail"),
+  authPassword: document.querySelector("#authPassword"),
+  signUpButton: document.querySelector("#signUpButton"),
+  signOutButton: document.querySelector("#signOutButton"),
+  authMessage: document.querySelector("#authMessage"),
+  setupWarning: document.querySelector("#setupWarning"),
+  userEmail: document.querySelector("#userEmail"),
+  syncStatus: document.querySelector("#syncStatus"),
+  teamSelect: document.querySelector("#teamSelect"),
+  createTeamButton: document.querySelector("#createTeamButton"),
+  inviteMemberButton: document.querySelector("#inviteMemberButton"),
+  saveProjectButton: document.querySelector("#saveProjectButton"),
   projectName: document.querySelector("#projectName"),
   marketName: document.querySelector("#marketName"),
   researchDate: document.querySelector("#researchDate"),
@@ -34,21 +61,309 @@ const els = {
   comparisonPreview: document.querySelector("#comparisonPreview")
 };
 
-const storeKey = "competitor-research-lab";
+function setMessage(message = "", isError = false) {
+  els.authMessage.textContent = message;
+  els.authMessage.style.color = isError ? "var(--coral)" : "var(--green)";
+}
+
+function setSyncStatus(message) {
+  els.syncStatus.textContent = message;
+}
+
+async function init() {
+  renderStrategies();
+  bindEvents();
+
+  if (!supabaseReady) {
+    els.setupWarning.textContent = "Add your Supabase URL and anon key to config.js, then redeploy.";
+    els.authScreen.classList.add("visible");
+    return;
+  }
+
+  const { data } = await supabase.auth.getSession();
+  await handleSession(data.session);
+
+  supabase.auth.onAuthStateChange((_event, session) => {
+    handleSession(session);
+  });
+}
+
+function bindEvents() {
+  els.authForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    await signIn();
+  });
+  els.signUpButton.addEventListener("click", signUp);
+  els.signOutButton.addEventListener("click", signOut);
+  els.teamSelect.addEventListener("change", () => loadTeam(els.teamSelect.value));
+  els.createTeamButton.addEventListener("click", createTeam);
+  els.inviteMemberButton.addEventListener("click", inviteMember);
+  els.saveProjectButton.addEventListener("click", saveProjectNow);
+  document.querySelector("#addCompetitorButton").addEventListener("click", () => addCompetitor());
+  document.querySelector("#addSourceButton").addEventListener("click", () => addSource());
+  document.querySelector("#buildQueueButton").addEventListener("click", buildResearchQueue);
+  document.querySelector("#saveSnapshotButton").addEventListener("click", saveSnapshot);
+  document.querySelector("#compareSnapshotsButton").addEventListener("click", compareSnapshots);
+  document.querySelector("#loadSampleButton").addEventListener("click", loadSample);
+  document.querySelector("#exportButton").addEventListener("click", exportReport);
+
+  [els.projectName, els.marketName, els.researchDate, els.analystName].forEach(input => {
+    input.addEventListener("input", persist);
+    input.addEventListener("change", persist);
+  });
+
+  document.querySelectorAll(".tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach(item => item.classList.remove("active"));
+      tab.classList.add("active");
+      state.activeView = tab.dataset.view;
+      renderInsightView();
+    });
+  });
+}
+
+async function signIn() {
+  setMessage("Signing in...");
+  const { error } = await supabase.auth.signInWithPassword({
+    email: els.authEmail.value,
+    password: els.authPassword.value
+  });
+  setMessage(error ? error.message : "Signed in.", Boolean(error));
+}
+
+async function signUp() {
+  setMessage("Creating account...");
+  const { error } = await supabase.auth.signUp({
+    email: els.authEmail.value,
+    password: els.authPassword.value
+  });
+  setMessage(error ? error.message : "Account created. Check your email if confirmation is enabled.", Boolean(error));
+}
+
+async function signOut() {
+  await supabase.auth.signOut();
+  resetWorkspace();
+  els.authScreen.classList.add("visible");
+}
+
+async function handleSession(session) {
+  state.session = session;
+  if (!session) {
+    els.authScreen.classList.add("visible");
+    return;
+  }
+
+  els.authScreen.classList.remove("visible");
+  els.userEmail.textContent = session.user.email;
+  await loadTeams();
+}
+
+async function loadTeams() {
+  setSyncStatus("Loading teams...");
+  const { data, error } = await supabase
+    .from("team_members")
+    .select("role, teams(id, name)")
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    setSyncStatus("Could not load teams");
+    setMessage(error.message, true);
+    return;
+  }
+
+  state.teams = (data || []).map(row => ({
+    id: row.teams.id,
+    name: row.teams.name,
+    role: row.role
+  }));
+
+  renderTeamSelect();
+
+  if (!state.teams.length) {
+    resetWorkspace();
+    setSyncStatus("Create a team to start");
+    return;
+  }
+
+  await loadTeam(state.currentTeamId || state.teams[0].id);
+}
+
+function renderTeamSelect() {
+  els.teamSelect.innerHTML = state.teams.map(team => (
+    `<option value="${team.id}">${escapeHtml(team.name)} (${team.role})</option>`
+  )).join("") || "<option value=''>No team yet</option>";
+}
+
+async function createTeam() {
+  const name = prompt("Team name", "Baby Bhumi Research Team");
+  if (!name) return;
+
+  setSyncStatus("Creating team...");
+  const { data, error } = await supabase.rpc("create_team", { team_name: name });
+
+  if (error) {
+    setSyncStatus("Team creation failed");
+    setMessage(error.message, true);
+    return;
+  }
+
+  state.currentTeamId = data;
+  await loadTeams();
+}
+
+async function inviteMember() {
+  if (!state.currentTeamId) return;
+  const email = prompt("Team member email");
+  if (!email) return;
+
+  setSyncStatus("Adding team member...");
+  const { error } = await supabase.rpc("invite_team_member", {
+    target_team_id: state.currentTeamId,
+    member_email: email,
+    member_role: "member"
+  });
+
+  setSyncStatus(error ? "Invite failed" : "Team member added");
+  setMessage(error ? error.message : "Member added. They can sign in and see this team's workspace.", Boolean(error));
+}
+
+async function loadTeam(teamId) {
+  if (!teamId) return;
+  state.currentTeamId = teamId;
+  els.teamSelect.value = teamId;
+  setSyncStatus("Loading workspace...");
+
+  const { data, error } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("team_id", teamId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    setSyncStatus("Could not load project");
+    setMessage(error.message, true);
+    return;
+  }
+
+  const project = data || await createProject(teamId);
+  await hydrateProject(project);
+  await loadSnapshots();
+  setSyncStatus("Synced");
+}
+
+async function createProject(teamId) {
+  const { data, error } = await supabase
+    .from("projects")
+    .insert({
+      team_id: teamId,
+      name: "Competitor Analysis",
+      updated_by: state.session.user.id,
+      current_state: defaultProjectState()
+    })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+async function hydrateProject(project) {
+  state.isHydrating = true;
+  state.currentProjectId = project.id;
+  const currentState = project.current_state || defaultProjectState();
+
+  els.projectName.value = project.name || currentState.projectName || "";
+  els.marketName.value = project.market || currentState.marketName || "";
+  els.researchDate.value = project.research_date || currentState.researchDate || "";
+  els.analystName.value = project.analyst || currentState.analystName || "";
+  els.competitorList.innerHTML = "";
+  els.sourceList.innerHTML = "";
+  renderStrategies(currentState.strategyScores || {});
+  (currentState.competitors || []).forEach(addCompetitor);
+  (currentState.sources || []).forEach(addSource);
+  state.isHydrating = false;
+  readDomIntoState();
+  renderComputedViews();
+}
+
+function resetWorkspace() {
+  state.currentProjectId = null;
+  state.currentTeamId = null;
+  state.teams = [];
+  state.competitors = [];
+  state.sources = [];
+  state.snapshots = [];
+  els.projectName.value = "";
+  els.marketName.value = "";
+  els.researchDate.value = "";
+  els.analystName.value = "";
+  els.competitorList.innerHTML = "";
+  els.sourceList.innerHTML = "";
+  els.teamSelect.innerHTML = "<option value=''>No team loaded</option>";
+  renderStrategies();
+  renderComputedViews();
+}
+
+function defaultProjectState() {
+  return {
+    projectName: "Competitor Analysis",
+    marketName: "",
+    researchDate: new Date().toISOString().slice(0, 10),
+    analystName: "",
+    competitors: [],
+    sources: [],
+    strategyScores: {}
+  };
+}
 
 function persist() {
+  if (state.isHydrating) return;
   readDomIntoState();
-  localStorage.setItem(storeKey, JSON.stringify({
+  renderComputedViews();
+  scheduleSave();
+}
+
+function scheduleSave() {
+  if (!state.currentProjectId) return;
+  clearTimeout(state.saveTimer);
+  setSyncStatus("Unsaved changes...");
+  state.saveTimer = setTimeout(saveProjectNow, saveDelay);
+}
+
+async function saveProjectNow() {
+  if (!state.currentProjectId) return;
+  readDomIntoState();
+  setSyncStatus("Saving...");
+
+  const payload = getCurrentState();
+  const { error } = await supabase
+    .from("projects")
+    .update({
+      name: payload.projectName || "Competitor Analysis",
+      market: payload.marketName,
+      research_date: payload.researchDate || null,
+      analyst: payload.analystName,
+      current_state: payload,
+      updated_by: state.session.user.id
+    })
+    .eq("id", state.currentProjectId);
+
+  setSyncStatus(error ? "Save failed" : "Synced");
+  if (error) setMessage(error.message, true);
+}
+
+function getCurrentState() {
+  return {
     projectName: els.projectName.value,
     marketName: els.marketName.value,
     researchDate: els.researchDate.value,
     analystName: els.analystName.value,
     competitors: state.competitors,
     sources: state.sources,
-    snapshots: state.snapshots,
     strategyScores: getStrategyScores()
-  }));
-  renderComputedViews();
+  };
 }
 
 function readDomIntoState() {
@@ -74,7 +389,7 @@ function readDomIntoState() {
 function addCompetitor(data = {}) {
   const template = document.querySelector("#competitorTemplate");
   const card = template.content.firstElementChild.cloneNode(true);
-  const defaults = {
+  const competitor = {
     name: "",
     website: "",
     instagram: "",
@@ -83,9 +398,9 @@ function addCompetitor(data = {}) {
     audience: "",
     products: "",
     pricing: "",
-    usp: ""
+    usp: "",
+    ...data
   };
-  const competitor = { ...defaults, ...data };
 
   card.querySelector(".competitor-name").value = competitor.name;
   card.querySelector(".website").value = competitor.website;
@@ -212,26 +527,65 @@ function renderStrategies(savedScores = {}) {
   });
 }
 
-function saveSnapshot() {
+async function saveSnapshot() {
+  if (!state.currentProjectId) return;
   readDomIntoState();
-  const snapshot = {
-    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-    savedAt: new Date().toISOString(),
-    projectName: els.projectName.value,
-    marketName: els.marketName.value,
-    competitors: structuredClone(state.competitors),
-    sources: structuredClone(state.sources),
-    strategyScores: getStrategyScores(),
-    summary: {
-      competitorCount: state.competitors.length,
-      sourceCount: state.sources.filter(source => source.url).length,
-      productCategoryCount: countProductCategories(),
-      confidenceScore: averageConfidence()
-    }
+  const snapshotData = getCurrentState();
+  const summary = {
+    competitorCount: state.competitors.length,
+    sourceCount: state.sources.filter(source => source.url).length,
+    productCategoryCount: countProductCategories(),
+    confidenceScore: averageConfidence()
   };
 
-  state.snapshots.unshift(snapshot);
-  persist();
+  setSyncStatus("Saving snapshot...");
+  const { error } = await supabase
+    .from("snapshots")
+    .insert({
+      project_id: state.currentProjectId,
+      team_id: state.currentTeamId,
+      title: snapshotData.projectName || "Competitor Analysis",
+      data: snapshotData,
+      summary,
+      created_by: state.session.user.id
+    });
+
+  if (error) {
+    setSyncStatus("Snapshot failed");
+    setMessage(error.message, true);
+    return;
+  }
+
+  await saveProjectNow();
+  await loadSnapshots();
+  setSyncStatus("Snapshot saved");
+}
+
+async function loadSnapshots() {
+  if (!state.currentProjectId) return;
+
+  const { data, error } = await supabase
+    .from("snapshots")
+    .select("*")
+    .eq("project_id", state.currentProjectId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    setMessage(error.message, true);
+    return;
+  }
+
+  state.snapshots = (data || []).map(row => ({
+    id: row.id,
+    savedAt: row.created_at,
+    projectName: row.title,
+    marketName: row.data.marketName,
+    competitors: row.data.competitors || [],
+    sources: row.data.sources || [],
+    strategyScores: row.data.strategyScores || {},
+    summary: row.summary || {}
+  }));
+  renderComputedViews();
 }
 
 function renderSnapshots() {
@@ -259,7 +613,7 @@ function renderSnapshots() {
     <article class="snapshot-card">
       <div>
         <strong>${escapeHtml(snapshot.projectName || "Untitled analysis")}</strong>
-        <span>${formatDate(snapshot.savedAt)} | ${snapshot.summary.competitorCount} competitors | ${snapshot.summary.sourceCount} sources | ${snapshot.summary.confidenceScore}% confidence</span>
+        <span>${formatDate(snapshot.savedAt)} | ${snapshot.summary.competitorCount || 0} competitors | ${snapshot.summary.sourceCount || 0} sources | ${snapshot.summary.confidenceScore || 0}% confidence</span>
       </div>
       <button data-load-snapshot="${snapshot.id}">Load</button>
     </article>
@@ -274,13 +628,15 @@ function loadSnapshot(id) {
   const snapshot = state.snapshots.find(item => item.id === id);
   if (!snapshot) return;
 
+  state.isHydrating = true;
   els.projectName.value = snapshot.projectName || "";
   els.marketName.value = snapshot.marketName || "";
   els.competitorList.innerHTML = "";
   els.sourceList.innerHTML = "";
+  renderStrategies(snapshot.strategyScores);
   snapshot.competitors.forEach(addCompetitor);
   snapshot.sources.forEach(addSource);
-  renderStrategies(snapshot.strategyScores);
+  state.isHydrating = false;
   persist();
 }
 
@@ -305,14 +661,14 @@ function compareSnapshots() {
     .map(item => item.name);
 
   els.comparisonPreview.textContent = [
-    `# Snapshot Comparison`,
+    "# Snapshot Comparison",
     `Baseline: ${formatDate(baseline.savedAt)}`,
     `Comparison: ${formatDate(comparison.savedAt)}`,
     "",
-    `Competitors: ${baseline.summary.competitorCount} -> ${comparison.summary.competitorCount}`,
-    `Evidence sources: ${baseline.summary.sourceCount} -> ${comparison.summary.sourceCount}`,
-    `Product categories: ${baseline.summary.productCategoryCount} -> ${comparison.summary.productCategoryCount}`,
-    `Average confidence: ${baseline.summary.confidenceScore}% -> ${comparison.summary.confidenceScore}%`,
+    `Competitors: ${baseline.summary.competitorCount || 0} -> ${comparison.summary.competitorCount || 0}`,
+    `Evidence sources: ${baseline.summary.sourceCount || 0} -> ${comparison.summary.sourceCount || 0}`,
+    `Product categories: ${baseline.summary.productCategoryCount || 0} -> ${comparison.summary.productCategoryCount || 0}`,
+    `Average confidence: ${baseline.summary.confidenceScore || 0}% -> ${comparison.summary.confidenceScore || 0}%`,
     "",
     `Added competitors: ${added.join(", ") || "None"}`,
     `Removed competitors: ${removed.join(", ") || "None"}`,
@@ -349,7 +705,7 @@ function renderReport() {
     ...state.sources.map(source => `- ${source.type}: ${source.url || "No URL"} (${source.status})`),
     "",
     "## Historical Snapshots",
-    ...state.snapshots.map(snapshot => `- ${formatDate(snapshot.savedAt)}: ${snapshot.summary.competitorCount} competitors, ${snapshot.summary.sourceCount} sources, ${snapshot.summary.confidenceScore}% confidence`),
+    ...state.snapshots.map(snapshot => `- ${formatDate(snapshot.savedAt)}: ${snapshot.summary.competitorCount || 0} competitors, ${snapshot.summary.sourceCount || 0} sources, ${snapshot.summary.confidenceScore || 0}% confidence`),
     "",
     "## Strategy Scores",
     ...Object.entries(getStrategyScores()).map(([key, value]) => `- ${titleFromSlug(key)}: ${value}/5`)
@@ -358,51 +714,11 @@ function renderReport() {
   els.reportPreview.textContent = report;
 }
 
-function countProductCategories() {
-  const products = state.competitors.flatMap(competitor => competitor.products.split(/[,\n;]/));
-  return new Set(products.map(item => item.trim().toLowerCase()).filter(Boolean)).size;
-}
-
-function averageConfidence() {
-  if (!state.competitors.length) return 0;
-  const total = state.competitors.reduce((sum, competitor) => sum + competitor.confidence, 0);
-  return Math.round(total / state.competitors.length);
-}
-
-function getStrategyScores() {
-  return Object.fromEntries([...document.querySelectorAll("[data-strategy]")].map(input => [
-    input.dataset.strategy,
-    Number(input.value)
-  ]));
-}
-
-function loadSaved() {
-  const saved = JSON.parse(localStorage.getItem(storeKey) || "null");
-  els.researchDate.valueAsDate = new Date();
-  renderStrategies();
-
-  if (!saved) {
-    addCompetitor();
-    addSource();
-    return;
-  }
-
-  els.projectName.value = saved.projectName || "";
-  els.marketName.value = saved.marketName || "";
-  els.researchDate.value = saved.researchDate || "";
-  els.analystName.value = saved.analystName || "";
-  state.snapshots = saved.snapshots || [];
-  renderStrategies(saved.strategyScores);
-  (saved.competitors || []).forEach(addCompetitor);
-  (saved.sources || []).forEach(addSource);
-  renderComputedViews();
-}
-
 function loadSample() {
   els.projectName.value = "Baby Bhumi";
   els.marketName.value = "Baby and toddler products";
   els.researchDate.valueAsDate = new Date();
-  els.analystName.value = "Research team";
+  els.analystName.value = state.session?.user?.email || "Research team";
   els.competitorList.innerHTML = "";
   els.sourceList.innerHTML = "";
 
@@ -435,7 +751,6 @@ function loadSample() {
 }
 
 function exportReport() {
-  persist();
   const blob = new Blob([els.reportPreview.textContent], { type: "text/markdown" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -445,8 +760,26 @@ function exportReport() {
   URL.revokeObjectURL(url);
 }
 
-function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, char => ({
+function countProductCategories() {
+  const products = state.competitors.flatMap(competitor => competitor.products.split(/[,\n;]/));
+  return new Set(products.map(item => item.trim().toLowerCase()).filter(Boolean)).size;
+}
+
+function averageConfidence() {
+  if (!state.competitors.length) return 0;
+  const total = state.competitors.reduce((sum, competitor) => sum + competitor.confidence, 0);
+  return Math.round(total / state.competitors.length);
+}
+
+function getStrategyScores() {
+  return Object.fromEntries([...document.querySelectorAll("[data-strategy]")].map(input => [
+    input.dataset.strategy,
+    Number(input.value)
+  ]));
+}
+
+function escapeHtml(value = "") {
+  return String(value).replace(/[&<>"']/g, char => ({
     "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
@@ -474,30 +807,4 @@ function titleFromSlug(value) {
   return value.replace(/-/g, " ").replace(/\b\w/g, char => char.toUpperCase());
 }
 
-document.querySelector("#addCompetitorButton").addEventListener("click", () => addCompetitor());
-document.querySelector("#addSourceButton").addEventListener("click", () => addSource());
-document.querySelector("#buildQueueButton").addEventListener("click", buildResearchQueue);
-document.querySelector("#saveSnapshotButton").addEventListener("click", saveSnapshot);
-document.querySelector("#compareSnapshotsButton").addEventListener("click", compareSnapshots);
-document.querySelector("#loadSampleButton").addEventListener("click", loadSample);
-document.querySelector("#exportButton").addEventListener("click", exportReport);
-document.querySelector("#newProjectButton").addEventListener("click", () => {
-  localStorage.removeItem(storeKey);
-  location.reload();
-});
-
-[els.projectName, els.marketName, els.researchDate, els.analystName].forEach(input => {
-  input.addEventListener("input", persist);
-  input.addEventListener("change", persist);
-});
-
-document.querySelectorAll(".tab").forEach(tab => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach(item => item.classList.remove("active"));
-    tab.classList.add("active");
-    state.activeView = tab.dataset.view;
-    renderInsightView();
-  });
-});
-
-loadSaved();
+init();
