@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Competitor Research Lab</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">CR</span>
+          <div>
+            <strong>Research Lab</strong>
+            <span>Competitor intelligence</span>
+          </div>
+        </div>
+
+        <button class="primary-action" id="newProjectButton">New analysis</button>
+
+        <nav class="nav-list" aria-label="Workspace sections">
+          <a href="#overview" class="active">Overview</a>
+          <a href="#competitors">Competitors</a>
+          <a href="#evidence">Evidence</a>
+          <a href="#insights">Insights</a>
+          <a href="#strategy">Strategy</a>
+          <a href="#history">History</a>
+          <a href="#report">Report</a>
+        </nav>
+
+        <div class="sidebar-note">
+          <strong>Research standard</strong>
+          <p>Every claim should be tied to a source URL, capture date, and confidence level.</p>
+        </div>
+      </aside>
+
+      <main>
+        <section class="toolbar" id="overview">
+          <div>
+            <p class="eyebrow">Market research workspace</p>
+            <h1>Competitor Analysis</h1>
+          </div>
+          <div class="toolbar-actions">
+            <button id="loadSampleButton">Load sample</button>
+            <button id="exportButton">Export report</button>
+          </div>
+        </section>
+
+        <section class="project-panel">
+          <div class="field-grid">
+            <label>
+              Brand / project
+              <input id="projectName" type="text" placeholder="Baby Bhumi" />
+            </label>
+            <label>
+              Market
+              <input id="marketName" type="text" placeholder="Baby care in India" />
+            </label>
+            <label>
+              Research date
+              <input id="researchDate" type="date" />
+            </label>
+            <label>
+              Analyst
+              <input id="analystName" type="text" placeholder="Your name" />
+            </label>
+          </div>
+        </section>
+
+        <section class="metric-strip" aria-label="Analysis summary">
+          <article>
+            <span id="competitorCount">0</span>
+            <p>Competitors</p>
+          </article>
+          <article>
+            <span id="sourceCount">0</span>
+            <p>Evidence sources</p>
+          </article>
+          <article>
+            <span id="productCategoryCount">0</span>
+            <p>Product categories</p>
+          </article>
+          <article>
+            <span id="confidenceScore">0%</span>
+            <p>Average confidence</p>
+          </article>
+          <article>
+            <span id="snapshotCount">0</span>
+            <p>Saved snapshots</p>
+          </article>
+        </section>
+
+        <section class="content-grid">
+          <div class="workspace-section wide" id="competitors">
+            <div class="section-header">
+            <div>
+              <p class="eyebrow">Step 1</p>
+              <h2>Competitors</h2>
+            </div>
+            <div class="button-row">
+              <button id="buildQueueButton">Build research queue</button>
+              <button id="addCompetitorButton">Add competitor</button>
+            </div>
+          </div>
+            <div id="competitorList" class="card-list"></div>
+          </div>
+
+          <div class="workspace-section" id="evidence">
+            <div class="section-header">
+              <div>
+                <p class="eyebrow">Step 2</p>
+                <h2>Evidence Queue</h2>
+              </div>
+              <button id="addSourceButton">Add source</button>
+            </div>
+            <div id="sourceList" class="source-list"></div>
+          </div>
+
+          <div class="workspace-section" id="insights">
+            <div class="section-header">
+              <div>
+                <p class="eyebrow">Step 3</p>
+                <h2>Insight Matrix</h2>
+              </div>
+            </div>
+            <div class="tabs" role="tablist" aria-label="Insight views">
+              <button class="tab active" data-view="audience">Audience</button>
+              <button class="tab" data-view="products">Products</button>
+              <button class="tab" data-view="pricing">Pricing</button>
+              <button class="tab" data-view="usp">USP</button>
+            </div>
+            <div id="insightView"></div>
+          </div>
+
+          <div class="workspace-section wide" id="strategy">
+            <div class="section-header">
+              <div>
+                <p class="eyebrow">Step 4</p>
+                <h2>Strategy Signals</h2>
+              </div>
+            </div>
+            <div class="strategy-grid" id="strategyGrid"></div>
+          </div>
+
+          <div class="workspace-section wide" id="history">
+            <div class="section-header">
+              <div>
+                <p class="eyebrow">Step 5</p>
+                <h2>Historical Tracking</h2>
+              </div>
+              <div class="button-row">
+                <button id="saveSnapshotButton">Save snapshot</button>
+                <button id="compareSnapshotsButton">Compare selected</button>
+              </div>
+            </div>
+            <div class="history-controls">
+              <label>
+                Baseline
+                <select id="baselineSnapshot"></select>
+              </label>
+              <label>
+                Comparison
+                <select id="comparisonSnapshot"></select>
+              </label>
+            </div>
+            <div id="snapshotList" class="snapshot-list"></div>
+            <pre id="comparisonPreview" class="report-preview compact-report"></pre>
+          </div>
+
+          <div class="workspace-section wide" id="report">
+            <div class="section-header">
+              <div>
+                <p class="eyebrow">Step 6</p>
+                <h2>Report Preview</h2>
+              </div>
+            </div>
+            <pre id="reportPreview" class="report-preview"></pre>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="competitorTemplate">
+      <article class="data-card competitor-card">
+        <div class="card-header">
+          <input class="competitor-name" placeholder="Competitor name" />
+          <button class="icon-button remove-competitor" aria-label="Remove competitor">x</button>
+        </div>
+        <div class="field-grid compact">
+          <label>Website <input class="website" placeholder="https://example.com" /></label>
+          <label>Instagram <input class="instagram" placeholder="@handle or URL" /></label>
+          <label>Primary market <input class="market" placeholder="D2C, retail, marketplace" /></label>
+          <label>Confidence
+            <select class="confidence">
+              <option value="30">Low</option>
+              <option value="65" selected>Medium</option>
+              <option value="90">High</option>
+            </select>
+          </label>
+        </div>
+        <label>Target audience <textarea class="audience" placeholder="Parents of newborns, gift buyers, premium organic shoppers..."></textarea></label>
+        <label>Products / services <textarea class="products" placeholder="Clothing, skin care, bedding, subscription bundles..."></textarea></label>
+        <label>Price points <textarea class="pricing" placeholder="Onesies Rs. 399-899; gift hampers Rs. 1,499-3,999..."></textarea></label>
+        <label>USP <textarea class="usp" placeholder="Organic cotton, dermatologist-tested, design-led gifting..."></textarea></label>
+      </article>
+    </template>
+
+    <template id="sourceTemplate">
+      <article class="source-card">
+        <select class="source-type">
+          <option>Website</option>
+          <option>Social media</option>
+          <option>Ad library</option>
+          <option>Marketplace</option>
+          <option>Review site</option>
+          <option>News / PR</option>
+        </select>
+        <input class="source-url" placeholder="Source URL" />
+        <select class="source-status">
+          <option>To research</option>
+          <option>Captured</option>
+          <option>Analyzed</option>
+        </select>
+        <button class="icon-button remove-source" aria-label="Remove source">x</button>
+      </article>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
