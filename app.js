@@ -4,6 +4,7 @@ import { SUPABASE_CONFIG } from "./config.js?v=20260606-2";
 const supabaseReady = Boolean(SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey);
 const supabase = supabaseReady ? createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey) : null;
 const saveDelay = 700;
+const authRedirectUrl = `${window.location.origin}${window.location.pathname}`;
 
 const state = {
   activeView: "audience",
@@ -139,7 +140,10 @@ async function signUp() {
   setMessage("Creating account...");
   const { error } = await supabase.auth.signUp({
     email: credentials.email,
-    password: credentials.password
+    password: credentials.password,
+    options: {
+      emailRedirectTo: authRedirectUrl
+    }
   });
   setMessage(error ? error.message : "Account created. Check your email if confirmation is enabled.", Boolean(error));
 }
