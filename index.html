@@ -53,6 +53,7 @@
           <a href="#overview" class="active">Overview</a>
           <a href="#competitors">Competitors</a>
           <a href="#evidence">Evidence</a>
+          <a href="#ai-review">AI Review</a>
           <a href="#insights">Insights</a>
           <a href="#strategy">Strategy</a>
           <a href="#history">History</a>
@@ -161,6 +162,18 @@
             <div id="sourceList" class="source-list"></div>
           </div>
 
+          <div class="workspace-section" id="ai-review">
+            <div class="section-header">
+              <div>
+                <p class="eyebrow">AI review</p>
+                <h2>Draft Insights</h2>
+              </div>
+              <button id="refreshResearchButton">Refresh research</button>
+            </div>
+            <div id="researchJobList" class="source-list"></div>
+            <div id="aiInsightList" class="ai-insight-list"></div>
+          </div>
+
           <div class="workspace-section" id="insights">
             <div class="section-header">
               <div>
@@ -229,7 +242,10 @@
       <article class="data-card competitor-card">
         <div class="card-header">
           <input class="competitor-name" placeholder="Competitor name" />
-          <button class="icon-button remove-competitor" aria-label="Remove competitor">x</button>
+          <div class="source-actions">
+            <button class="run-research" type="button">Run website research</button>
+            <button class="icon-button remove-competitor" aria-label="Remove competitor">x</button>
+          </div>
         </div>
         <div class="field-grid compact">
           <label>Website <input class="website" placeholder="https://example.com" /></label>

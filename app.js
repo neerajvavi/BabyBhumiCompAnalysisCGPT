@@ -19,6 +19,8 @@ const state = {
   competitors: [],
   sources: [],
   snapshots: [],
+  researchJobs: [],
+  aiInsights: [],
   teams: [],
   currentTeamId: null,
   currentProjectId: null,
@@ -61,6 +63,9 @@ const els = {
   snapshotList: document.querySelector("#snapshotList"),
   comparisonPreview: document.querySelector("#comparisonPreview")
 };
+
+els.researchJobList = document.querySelector("#researchJobList");
+els.aiInsightList = document.querySelector("#aiInsightList");
 
 function setMessage(message = "", isError = false) {
   els.authMessage.textContent = message;
@@ -105,6 +110,7 @@ function bindEvents() {
   document.querySelector("#addSourceButton").addEventListener("click", () => addSource());
   document.querySelector("#buildQueueButton").addEventListener("click", () => buildResearchQueue());
   document.querySelector("#openNextSourceButton").addEventListener("click", openNextSource);
+  document.querySelector("#refreshResearchButton").addEventListener("click", loadResearchData);
   document.querySelector("#saveSnapshotButton").addEventListener("click", saveSnapshot);
   document.querySelector("#compareSnapshotsButton").addEventListener("click", compareSnapshots);
   document.querySelector("#loadSampleButton").addEventListener("click", loadSample);
@@ -280,6 +286,7 @@ async function loadTeam(teamId) {
   const project = data || await createProject(teamId);
   await hydrateProject(project);
   await loadSnapshots();
+  await loadResearchData();
   setSyncStatus("Synced");
 }
 
@@ -325,6 +332,8 @@ function resetWorkspace() {
   state.competitors = [];
   state.sources = [];
   state.snapshots = [];
+  state.researchJobs = [];
+  state.aiInsights = [];
   els.projectName.value = "";
   els.marketName.value = "";
   els.researchDate.value = "";
@@ -441,6 +450,7 @@ function addCompetitor(data = {}) {
   card.querySelector(".products").value = competitor.products;
   card.querySelector(".pricing").value = competitor.pricing;
   card.querySelector(".usp").value = competitor.usp;
+  card.querySelector(".run-research").addEventListener("click", () => runWebsiteResearch(card));
   card.querySelector(".remove-competitor").addEventListener("click", () => {
     card.remove();
     persist();
@@ -567,7 +577,127 @@ function renderComputedViews() {
   els.snapshotCount.textContent = state.snapshots.length;
   renderInsightView();
   renderSnapshots();
+  renderResearchData();
   renderReport();
+}
+
+async function runWebsiteResearch(card) {
+  if (!state.currentProjectId || !state.currentTeamId) {
+    setSyncStatus("Create or select a team first");
+    return;
+  }
+
+  const competitor = {
+    name: card.querySelector(".competitor-name").value.trim(),
+    website: card.querySelector(".website").value.trim()
+  };
+
+  if (!competitor.website) {
+    setSyncStatus("Add a competitor website first");
+    return;
+  }
+
+  setSyncStatus("Running website research...");
+  const { data, error } = await supabase.functions.invoke("run-website-research", {
+    body: {
+      project_id: state.currentProjectId,
+      team_id: state.currentTeamId,
+      competitor
+    }
+  });
+
+  if (error) {
+    setSyncStatus("Research failed");
+    setMessage(error.message || "Research function failed.", true);
+    return;
+  }
+
+  setSyncStatus(`Research ready: ${data.insights_created || 0} draft insights`);
+  await loadResearchData();
+}
+
+async function loadResearchData() {
+  if (!state.currentProjectId) return;
+
+  const [{ data: jobs, error: jobsError }, { data: insights, error: insightsError }] = await Promise.all([
+    supabase
+      .from("research_jobs")
+      .select("*")
+      .eq("project_id", state.currentProjectId)
+      .order("created_at", { ascending: false })
+      .limit(10),
+    supabase
+      .from("ai_insights")
+      .select("*")
+      .eq("project_id", state.currentProjectId)
+      .order("created_at", { ascending: false })
+      .limit(30)
+  ]);
+
+  if (jobsError || insightsError) {
+    setMessage((jobsError || insightsError).message, true);
+    return;
+  }
+
+  state.researchJobs = jobs || [];
+  state.aiInsights = insights || [];
+  renderResearchData();
+}
+
+function renderResearchData() {
+  if (!els.researchJobList || !els.aiInsightList) return;
+
+  els.researchJobList.innerHTML = state.researchJobs.map(job => `
+    <article class="snapshot-card">
+      <div>
+        <strong>${escapeHtml(job.competitor_name)}</strong>
+        <span>${escapeHtml(job.status)} | ${job.progress}% | ${escapeHtml(job.domain)}${job.error_message ? ` | ${escapeHtml(job.error_message)}` : ""}</span>
+      </div>
+    </article>
+  `).join("") || "<p>No research jobs yet.</p>";
+
+  els.aiInsightList.innerHTML = state.aiInsights.map(insight => `
+    <article class="ai-insight-card ${escapeHtml(insight.approval_status)}">
+      <div class="card-header">
+        <div>
+          <p class="eyebrow">${escapeHtml(insight.insight_type)} | ${insight.confidence}% confidence</p>
+          <h3>${escapeHtml(insight.title)}</h3>
+        </div>
+        <div class="source-actions">
+          <button data-approve-insight="${insight.id}">Approve</button>
+          <button data-reject-insight="${insight.id}">Reject</button>
+        </div>
+      </div>
+      <p>${escapeHtml(insight.summary)}</p>
+      <ol class="citation-list">
+        ${(insight.citations || []).map(citation => `
+          <li><a href="${escapeHtml(citation.url)}" target="_blank" rel="noreferrer">${escapeHtml(citation.source_id)}</a>: ${escapeHtml(citation.snippet)}</li>
+        `).join("")}
+      </ol>
+      <p class="ai-insight-meta">Status: ${escapeHtml(insight.approval_status)}</p>
+    </article>
+  `).join("") || "<p>No AI draft insights yet. Run website research from a competitor card.</p>";
+
+  document.querySelectorAll("[data-approve-insight]").forEach(button => {
+    button.addEventListener("click", () => updateInsightStatus(button.dataset.approveInsight, "approved"));
+  });
+  document.querySelectorAll("[data-reject-insight]").forEach(button => {
+    button.addEventListener("click", () => updateInsightStatus(button.dataset.rejectInsight, "rejected"));
+  });
+}
+
+async function updateInsightStatus(id, approvalStatus) {
+  const { error } = await supabase
+    .from("ai_insights")
+    .update({ approval_status: approvalStatus })
+    .eq("id", id);
+
+  if (error) {
+    setMessage(error.message, true);
+    return;
+  }
+
+  await loadResearchData();
 }
 
 function renderInsightView() {
@@ -801,6 +931,18 @@ function renderReport() {
     "",
     "## Historical Snapshots",
     ...state.snapshots.map(snapshot => `- ${formatDate(snapshot.savedAt)}: ${snapshot.summary.competitorCount || 0} competitors, ${snapshot.summary.sourceCount || 0} sources, ${snapshot.summary.confidenceScore || 0}% confidence`),
+    "",
+    "## Approved AI Insights",
+    ...state.aiInsights
+      .filter(insight => insight.approval_status === "approved")
+      .flatMap(insight => [
+        `### ${insight.title}`,
+        `Type: ${titleFromSlug(insight.insight_type)}`,
+        `Confidence: ${insight.confidence}%`,
+        insight.summary,
+        ...(insight.citations || []).map(citation => `- ${citation.source_id}: ${citation.url} | ${citation.snippet}`),
+        ""
+      ]),
     "",
     "## Strategy Scores",
     ...Object.entries(getStrategyScores()).map(([key, value]) => `- ${titleFromSlug(key)}: ${value}/5`)

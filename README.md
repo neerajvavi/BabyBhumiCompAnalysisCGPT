@@ -49,6 +49,58 @@ https://neerajvavi.github.io/BabyBhumiCompAnalysisCGPT/
 
 The app stores the editable workspace in `projects.current_state` and each saved historical point in `snapshots`. This keeps the current version easy to use while preserving every snapshot for comparison.
 
+## Automated website research
+
+The first automated research phase uses a Supabase Edge Function:
+
+```text
+supabase/functions/run-website-research/index.ts
+```
+
+It can:
+
+- Accept a competitor website from the app.
+- Crawl the homepage and likely product, pricing, about, FAQ, and content pages.
+- Store captured source text in `research_sources`.
+- Call OpenAI with structured JSON output.
+- Store AI-generated draft insights in `ai_insights`.
+- Let users approve or reject insights in the app.
+
+Run this SQL once before using the research function:
+
+```text
+supabase-research-schema.sql
+```
+
+Deploy the function from this project folder:
+
+```bash
+supabase functions deploy run-website-research
+```
+
+Set the OpenAI key as a Supabase secret:
+
+```bash
+supabase secrets set OPENAI_API_KEY=sk-your-key
+```
+
+Optional model override:
+
+```bash
+supabase secrets set OPENAI_MODEL=gpt-4.1-mini
+```
+
+The function uses OpenAI Structured Outputs so model responses come back as schema-shaped JSON. OpenAI recommends Structured Outputs over older JSON mode when schema adherence matters.
+
+After deployment:
+
+1. Sign in to the app.
+2. Create/select a team.
+3. Add competitor name and website.
+4. Click `Run website research` on the competitor card.
+5. Review AI draft insights in `AI Review`.
+6. Approve or reject each insight.
+
 ## What a deep-research production version needs
 
 The app should eventually add a backend research pipeline because browser-only scraping is limited by CORS, authentication, rate limits, and platform terms.
@@ -106,3 +158,5 @@ Add a backend service that can:
 - Extract product and pricing data.
 - Store source-level citations.
 - Call an LLM only after evidence is captured, so the generated analysis remains auditable.
+
+The first version of this backend now exists as a Supabase Edge Function for website research. Next phases are social, ads, marketplaces, reviews, screenshots, and scheduled monitoring.
