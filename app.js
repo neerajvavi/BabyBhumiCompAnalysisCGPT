@@ -123,6 +123,7 @@ function bindEvents() {
 }
 
 async function signIn() {
+  if (!validateAuthForm()) return;
   setMessage("Signing in...");
   const { error } = await supabase.auth.signInWithPassword({
     email: els.authEmail.value,
@@ -132,12 +133,24 @@ async function signIn() {
 }
 
 async function signUp() {
+  if (!validateAuthForm()) return;
   setMessage("Creating account...");
   const { error } = await supabase.auth.signUp({
     email: els.authEmail.value,
     password: els.authPassword.value
   });
   setMessage(error ? error.message : "Account created. Check your email if confirmation is enabled.", Boolean(error));
+}
+
+function validateAuthForm() {
+  if (!els.authForm.reportValidity()) return false;
+  if (els.authPassword.value.length < 6) {
+    els.authPassword.setCustomValidity("Password must be at least 6 characters.");
+    els.authForm.reportValidity();
+    els.authPassword.setCustomValidity("");
+    return false;
+  }
+  return true;
 }
 
 async function signOut() {
