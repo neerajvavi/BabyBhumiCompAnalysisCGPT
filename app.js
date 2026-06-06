@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { SUPABASE_CONFIG } from "./config.js?v=20260606";
+import { SUPABASE_CONFIG } from "./config.js?v=20260606-2";
 
 const supabaseReady = Boolean(SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey);
 const supabase = supabaseReady ? createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey) : null;
@@ -123,34 +123,45 @@ function bindEvents() {
 }
 
 async function signIn() {
-  if (!validateAuthForm()) return;
+  const credentials = getAuthCredentials();
+  if (!credentials) return;
   setMessage("Signing in...");
   const { error } = await supabase.auth.signInWithPassword({
-    email: els.authEmail.value,
-    password: els.authPassword.value
+    email: credentials.email,
+    password: credentials.password
   });
   setMessage(error ? error.message : "Signed in.", Boolean(error));
 }
 
 async function signUp() {
-  if (!validateAuthForm()) return;
+  const credentials = getAuthCredentials();
+  if (!credentials) return;
   setMessage("Creating account...");
   const { error } = await supabase.auth.signUp({
-    email: els.authEmail.value,
-    password: els.authPassword.value
+    email: credentials.email,
+    password: credentials.password
   });
   setMessage(error ? error.message : "Account created. Check your email if confirmation is enabled.", Boolean(error));
 }
 
-function validateAuthForm() {
-  if (!els.authForm.reportValidity()) return false;
-  if (els.authPassword.value.length < 6) {
+function getAuthCredentials() {
+  const email = els.authEmail.value.trim();
+  const password = els.authPassword.value;
+
+  if (!email || !password) {
+    setMessage("Enter an email and password before creating an account.", true);
+    els.authForm.reportValidity();
+    return null;
+  }
+
+  if (!els.authForm.reportValidity()) return null;
+  if (password.length < 6) {
     els.authPassword.setCustomValidity("Password must be at least 6 characters.");
     els.authForm.reportValidity();
     els.authPassword.setCustomValidity("");
-    return false;
+    return null;
   }
-  return true;
+  return { email, password };
 }
 
 async function signOut() {
