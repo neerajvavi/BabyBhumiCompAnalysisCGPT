@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { SUPABASE_CONFIG } from "./config.js?v=20260606-2";
+import { SUPABASE_CONFIG } from "./config.js?v=20260606-3";
 
 const supabaseReady = Boolean(SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey);
 const supabase = supabaseReady ? createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey) : null;
@@ -100,9 +100,11 @@ function bindEvents() {
   els.createTeamButton.addEventListener("click", createTeam);
   els.inviteMemberButton.addEventListener("click", inviteMember);
   els.saveProjectButton.addEventListener("click", saveProjectNow);
+  document.querySelector("#startResearchButton").addEventListener("click", startResearch);
   document.querySelector("#addCompetitorButton").addEventListener("click", () => addCompetitor());
   document.querySelector("#addSourceButton").addEventListener("click", () => addSource());
-  document.querySelector("#buildQueueButton").addEventListener("click", buildResearchQueue);
+  document.querySelector("#buildQueueButton").addEventListener("click", () => buildResearchQueue());
+  document.querySelector("#openNextSourceButton").addEventListener("click", openNextSource);
   document.querySelector("#saveSnapshotButton").addEventListener("click", saveSnapshot);
   document.querySelector("#compareSnapshotsButton").addEventListener("click", compareSnapshots);
   document.querySelector("#loadSampleButton").addEventListener("click", loadSample);
@@ -457,6 +459,7 @@ function addSource(data = {}) {
   card.querySelector(".source-type").value = source.type;
   card.querySelector(".source-url").value = source.url;
   card.querySelector(".source-status").value = source.status;
+  card.querySelector(".open-source").addEventListener("click", () => openSourceCard(card));
   card.querySelector(".remove-source").addEventListener("click", () => {
     card.remove();
     persist();
@@ -467,7 +470,13 @@ function addSource(data = {}) {
   persist();
 }
 
-function buildResearchQueue() {
+function startResearch() {
+  buildResearchQueue(true);
+  document.querySelector("#evidence").scrollIntoView({ behavior: "smooth", block: "start" });
+  openNextSource();
+}
+
+function buildResearchQueue(silent = false) {
   readDomIntoState();
   const planned = [];
 
@@ -478,18 +487,76 @@ function buildResearchQueue() {
     }
 
     if (competitor.instagram) {
-      planned.push({ type: "Social media", url: competitor.instagram, status: "To research" });
+      planned.push({ type: "Social media", url: normalizeSocialUrl(competitor.instagram), status: "To research" });
     }
 
     const name = competitor.name || competitor.website || "competitor";
-    planned.push({ type: "Ad library", url: `Meta Ad Library search: ${name}`, status: "To research" });
-    planned.push({ type: "Review site", url: `Reviews search: ${name}`, status: "To research" });
+    planned.push({ type: "Ad library", url: buildMetaAdLibraryUrl(name), status: "To research" });
+    planned.push({ type: "Review site", url: buildSearchUrl(`${name} reviews pricing products`), status: "To research" });
+    planned.push({ type: "News / PR", url: buildSearchUrl(`${name} baby brand news funding launch`), status: "To research" });
   });
 
   planned
     .filter(source => !state.sources.some(existing => existing.type === source.type && existing.url === source.url))
     .forEach(addSource);
   persist();
+  if (!silent) setSyncStatus("Research queue built");
+}
+
+function openNextSource() {
+  const cards = [...document.querySelectorAll(".source-card")];
+  const nextCard = cards.find(card => card.querySelector(".source-status").value === "To research") || cards[0];
+
+  if (!nextCard) {
+    buildResearchQueue(true);
+    return;
+  }
+
+  openSourceCard(nextCard);
+}
+
+function openSourceCard(card) {
+  const url = getResearchUrl(card.querySelector(".source-url").value);
+  if (!url) {
+    setSyncStatus("Add a source URL first");
+    return;
+  }
+
+  card.querySelector(".source-status").value = "Researching";
+  persist();
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function getResearchUrl(value) {
+  const raw = value.trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith("@")) return `https://www.instagram.com/${raw.slice(1)}/`;
+  return buildSearchUrl(raw);
+}
+
+function normalizeSocialUrl(value) {
+  const raw = value.trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith("@")) return `https://www.instagram.com/${raw.slice(1)}/`;
+  return raw;
+}
+
+function buildMetaAdLibraryUrl(query) {
+  const params = new URLSearchParams({
+    active_status: "all",
+    ad_type: "all",
+    country: "IN",
+    q: query,
+    search_type: "keyword_unordered",
+    media_type: "all"
+  });
+  return `https://www.facebook.com/ads/library/?${params.toString()}`;
+}
+
+function buildSearchUrl(query) {
+  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
 }
 
 function renderComputedViews() {

@@ -202,7 +202,14 @@ main {
 
 .toolbar-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
+}
+
+.primary-toolbar-action {
+  background: var(--green);
+  border-color: var(--green);
+  color: white;
 }
 
 .button-row {
@@ -343,6 +350,15 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
+}
+
+.source-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.open-source {
+  min-width: 72px;
 }
 
 .source-card select:first-child {

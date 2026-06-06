@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Competitor Research Lab</title>
-    <link rel="stylesheet" href="styles.css?v=20260606-2" />
+    <link rel="stylesheet" href="styles.css?v=20260606-3" />
   </head>
   <body>
     <section class="auth-screen visible" id="authScreen">
@@ -80,6 +80,7 @@
           </div>
           <div class="toolbar-actions">
             <button id="createTeamButton">Create team</button>
+            <button class="primary-toolbar-action" id="startResearchButton">Start research</button>
             <button id="loadSampleButton">Load sample</button>
             <button id="exportButton">Export report</button>
           </div>
@@ -142,6 +143,7 @@
             </div>
             <div class="button-row">
               <button id="buildQueueButton">Build research queue</button>
+              <button id="openNextSourceButton">Open next source</button>
               <button id="addCompetitorButton">Add competitor</button>
             </div>
           </div>
@@ -258,16 +260,20 @@
           <option>Review site</option>
           <option>News / PR</option>
         </select>
-        <input class="source-url" placeholder="Source URL" />
+        <input class="source-url" placeholder="Source URL or research task" />
         <select class="source-status">
           <option>To research</option>
+          <option>Researching</option>
           <option>Captured</option>
           <option>Analyzed</option>
         </select>
-        <button class="icon-button remove-source" aria-label="Remove source">x</button>
+        <div class="source-actions">
+          <button class="open-source" type="button">Open</button>
+          <button class="icon-button remove-source" aria-label="Remove source">x</button>
+        </div>
       </article>
     </template>
 
-    <script type="module" src="app.js?v=20260606-2"></script>
+    <script type="module" src="app.js?v=20260606-3"></script>
   </body>
 </html>
